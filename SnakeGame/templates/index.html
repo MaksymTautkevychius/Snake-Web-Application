@@ -26,6 +26,12 @@
             <canvas id="gameCanvas"></canvas>
             <p id="score">Score: 0</p>
         </div>
+        <div id="scoreboard" style="display:none;">
+            <h2>Game Over</h2>
+            <p id="finalScore"></p>
+            <h3>Top 10 Scores</h3>
+            <ul id="topScores" class="list-group"></ul>
+        </div>
     </div>
 
     <script>
@@ -65,13 +71,16 @@
 
                 if (game.move()) {
                     clearInterval(gameInterval);
-                    saveScore(playerName, mapSize, game.score);
+                    document.getElementById('gameContainer').style.display = 'none';
+                    document.getElementById('scoreboard').style.display = 'block';
+                    document.getElementById('finalScore').innerText = `${playerName}, your final score is: ${game.score}`;
+                    saveScore(playerName, mapSize, game.score).then(fetchTopScores);
                 }
 
                 document.getElementById('score').innerText = 'Score: ' + game.score;
             }
 
-            let gameInterval = setInterval(draw, 1000);
+            let gameInterval = setInterval(draw, 100);
         }
 
         class SnakeGame {
@@ -148,18 +157,27 @@
             }
         }
 
-        function saveScore(playerName, mapSize, score) {
-            fetch('/SaveScore', {
+        async function saveScore(playerName, mapSize, score) {
+            const response = await fetch('/SaveScore', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({name: playerName, map_size: mapSize, score: score})
-            }).then(response => response.json()).then(data => {
-                if (data.status === 'success') {
-                    alert('Score saved successfully!');
-                }
-                location.reload();
+            });
+            return response.json();
+        }
+
+        async function fetchTopScores() {
+            const response = await fetch('/TopScores');
+            const scores = await response.json();
+            const topScoresList = document.getElementById('topScores');
+            topScoresList.innerHTML = '';
+            scores.forEach(score => {
+                const listItem = document.createElement('li');
+                listItem.classList.add('list-group-item');
+                listItem.textContent = `${score.name}: ${score.score}`;
+                topScoresList.appendChild(listItem);
             });
         }
     </script>

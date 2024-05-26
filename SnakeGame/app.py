@@ -6,7 +6,7 @@ app = Flask(__name__)
 
 client = MongoClient('mongodb+srv://s26871:6v442fClsJtgXt3t@snakecluster.httdehw.mongodb.net/?retryWrites=true&w=majority&appName=SnakeCluster')
 db = client['SnakeDB']
-score_collection = db['scores4']
+scoreCollection = db['scores4']
 
 class Food:
     def __init__(self, map_size):
@@ -140,10 +140,15 @@ def Saves():
     MapSize = data.get('MapSize')
     score = data.get('score')
     if name and score is not None:
-        score_collection.insert_one({'name': name, 'mapSize': MapSize, 'score': score})
+        scoreCollection.insert_one({'name': name, 'mapSize': MapSize, 'score': score})
         return jsonify({'status': 'success'}), 200
     else:
         return jsonify({'status': 'error'}), 400
+
+@app.route('/TopScores', methods=['GET'])
+def top_scores():
+    top_scores = scoreCollection.find().sort('score', -1).limit(10)
+    return jsonify([{'name': score['name'], 'score': score['score']} for score in top_scores])
 
 if __name__ == '__main__':
     app.run(debug=True)
