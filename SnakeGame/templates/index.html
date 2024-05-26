@@ -17,10 +17,13 @@
             <div class="form-group">
                 <input type="text" id="playerName" class="form-control" placeholder="Enter your name" required>
             </div>
+            <div class="form-group">
+                <input type="number" id="mapSize" class="form-control" placeholder="Enter map size (5-25)" required min="5" max="25">
+            </div>
             <button type="submit" class="btn btn-primary">Start Game</button>
         </form>
         <div id="gameContainer" style="display:none;">
-            <canvas id="gameCanvas" width="400" height="400"></canvas>
+            <canvas id="gameCanvas"></canvas>
             <p id="score">Score: 0</p>
         </div>
     </div>
@@ -29,50 +32,53 @@
         document.getElementById('playerForm').addEventListener('submit', function(e) {
             e.preventDefault();
             const playerName = document.getElementById('playerName').value;
-            if (playerName) {
+            const mapSize = parseInt(document.getElementById('mapSize').value);
+            if (playerName && mapSize >= 5 && mapSize <= 25) {
                 document.getElementById('playerForm').style.display = 'none';
                 document.getElementById('gameContainer').style.display = 'block';
-                startGame(playerName);
+                startGame(playerName, mapSize);
             }
         });
 
-        function startGame(playerName) {
+        function startGame(playerName, mapSize) {
             const canvas = document.getElementById('gameCanvas');
+            canvas.width = mapSize * 20;
+            canvas.height = mapSize * 20;
             const ctx = canvas.getContext('2d');
             const box = 20;
-            let game = new SnakeGame();
+            let game = new SnakeGame(mapSize);
+
             document.addEventListener('keydown', event => game.changeDirection(event.keyCode));
 
             function draw() {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
 
                 game.snake.forEach((segment, index) => {
-                    ctx.fillStyle = (index == 0) ? 'black' : 'black';
-                    ctx.fillRect(segment.x, segment.y, box, box);
+                    ctx.fillStyle = (index === 0) ? 'black' : 'green';
+                    ctx.fillRect(segment.x * box, segment.y * box, box, box);
                     ctx.strokeStyle = 'yellow';
-                    ctx.strokeRect(segment.x, segment.y, box, box);
+                    ctx.strokeRect(segment.x * box, segment.y * box, box, box);
                 });
 
-                ctx.fillStyle = 'yellow';
-                ctx.fillRect(game.food.x, game.food.y, box, box);
+                ctx.fillStyle = 'red';
+                ctx.fillRect(game.food.x * box, game.food.y * box, box, box);
 
                 if (game.move()) {
                     clearInterval(gameInterval);
-                    saveScore(playerName, game.score);
+                    saveScore(playerName, mapSize, game.score);
                 }
 
                 document.getElementById('score').innerText = 'Score: ' + game.score;
             }
 
-            let gameInterval = setInterval(draw, 100);
+            let gameInterval = setInterval(draw, 1000);
         }
 
         class SnakeGame {
-            constructor() {
+            constructor(mapSize) {
+                this.mapSize = mapSize;
                 this.box = 20;
-                this.width = 400;
-                this.height = 400;
-                this.snake = [{x: 9 * this.box, y: 10 * this.box}];
+                this.snake = [{x: Math.floor(mapSize / 2), y: Math.floor(mapSize / 2)}];
                 this.food = this.generateFood();
                 this.score = 0;
                 this.direction = null;
@@ -80,8 +86,8 @@
 
             generateFood() {
                 return {
-                    x: Math.floor(Math.random() * 19 + 1) * this.box,
-                    y: Math.floor(Math.random() * 19 + 3) * this.box
+                    x: Math.floor(Math.random() * this.mapSize),
+                    y: Math.floor(Math.random() * this.mapSize)
                 };
             }
 
@@ -112,18 +118,18 @@
                 let headX = this.snake[0].x;
                 let headY = this.snake[0].y;
 
-                if (this.direction == 'LEFT') headX -= this.box;
-                if (this.direction == 'UP') headY -= this.box;
-                if (this.direction == 'RIGHT') headX += this.box;
-                if (this.direction == 'DOWN') headY += this.box;
+                if (this.direction === 'LEFT') headX -= 1;
+                if (this.direction === 'UP') headY -= 1;
+                if (this.direction === 'RIGHT') headX += 1;
+                if (this.direction === 'DOWN') headY += 1;
 
                 let newHead = {x: headX, y: headY};
 
-                if (headX < 0 || headX >= this.width || headY < 0 || headY >= this.height || this.checkCollision(newHead)) {
+                if (headX < 0 || headX >= this.mapSize || headY < 0 || headY >= this.mapSize || this.checkCollision(newHead)) {
                     return true;
                 }
 
-                if (headX == this.food.x && headY == this.food.y) {
+                if (headX === this.food.x && headY === this.food.y) {
                     this.score += 1;
                     this.food = this.generateFood();
                 } else {
@@ -136,26 +142,22 @@
 
             checkCollision(head) {
                 for (let segment of this.snake) {
-                    if (segment.x == head.x && segment.y == head.y) {
-                        return true;
-                    }
+                    if (segment.x === head.x && segment.y === head.y) return true;
                 }
                 return false;
             }
         }
 
-        function saveScore(playerName, score) {
+        function saveScore(playerName, mapSize, score) {
             fetch('/SaveScore', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({name: playerName, score: score})
+                body: JSON.stringify({name: playerName, map_size: mapSize, score: score})
             }).then(response => response.json()).then(data => {
                 if (data.status === 'success') {
                     alert('Score saved successfully!');
-                } else {
-                    alert('Failed to save score.');
                 }
                 location.reload();
             });
