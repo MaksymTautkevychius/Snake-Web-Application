@@ -48,8 +48,8 @@
 
         function startGame(playerName, mapSize) {
             const canvas = document.getElementById('gameCanvas');
-            canvas.width = mapSize * 20;
-            canvas.height = mapSize * 20;
+            canvas.width = mapSize * 10;
+            canvas.height = mapSize * 10;
             const ctx = canvas.getContext('2d');
             const box = 20;
             let game = new SnakeGame(mapSize);

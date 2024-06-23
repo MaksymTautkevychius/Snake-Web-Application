@@ -1,154 +1,113 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from pymongo import MongoClient
 import random
 
 app = Flask(__name__)
 
-client = MongoClient('mongodb+srv://s26871:6v442fClsJtgXt3t@snakecluster.httdehw.mongodb.net/?retryWrites=true&w=majority&appName=SnakeCluster')
+client = MongoClient(
+    'mongodb+srv://s26871:6v442fClsJtgXt3t@snakecluster.httdehw.mongodb.net/?retryWrites=true&w=majority&appName=SnakeCluster')
 db = client['SnakeDB']
-scoreCollection = db['scores4']
+collection = db['testProject']
 
-class Food:
-    def __init__(self, map_size):
-        self.map_size = map_size
-        self.relocate()
+# Constants
+GRID_SIZE = 32
+CELL_SIZE = 10
 
-    def relocate(self):
-        self.position = {
-            'x': random.randint(0, self.map_size - 1),
-            'y': random.randint(0, self.map_size - 1)
-        }
+# Game state
+State = {
+    "player_pos": GRID_SIZE // 2,
+    "aliens": [],
+    "bullets": [],
+    "total_destroyed": 0,
+    "game_over": False
+}
 
-    def get_position(self):
-        return self.position
 
-class Snake:
-    def __init__(self, initial_position):
-        self.segments = [initial_position]
-        self.direction = 'LEFT'
+def CreateMob():
+    return {
+        "x": random.randint(0, GRID_SIZE - 1),
+        "y": GRID_SIZE - 1
+    }
 
-    def move(self):
-        head = self.segments[0].copy()
-        if self.direction == 'LEFT':
-            head['x'] -= 1
-        elif self.direction == 'RIGHT':
-            head['x'] += 1
-        elif self.direction == 'UP':
-            head['y'] -= 1
-        elif self.direction == 'DOWN':
-            head['y'] += 1
-        self.segments.insert(0, head)
-        return head
-
-    def grow(self):
-        self.segments.append(self.segments[-1])
-
-    def pop_tail(self):
-        self.segments.pop()
-
-    def get_segments(self):
-        return self.segments
-
-    def change_direction(self, direction):
-        if direction in ['UP', 'DOWN', 'LEFT', 'RIGHT']:
-            if (direction == 'UP' and self.direction != 'DOWN') or \
-               (direction == 'DOWN' and self.direction != 'UP') or \
-               (direction == 'LEFT' and self.direction != 'RIGHT') or \
-               (direction == 'RIGHT' and self.direction != 'LEFT'):
-                self.direction = direction
-
-class SnakeGame:
-    def __init__(self, map_size, state=None):
-        self.map_size = map_size
-        if state:
-            self.snake = Snake(state['snake'][0])
-            self.snake.segments = state['snake']
-            self.snake.direction = state['direction']
-            self.food = Food(self.map_size)
-            self.food.position = state['food']
-            self.score = state['score']
-        else:
-            initial_position = {'x': map_size // 2, 'y': map_size // 2}
-            self.snake = Snake(initial_position)
-            self.food = Food(self.map_size)
-            self.score = 0
-
-    def update(self):
-        head = self.snake.move()
-
-        if head == self.food.get_position():
-            self.food.relocate()
-            while self.food.get_position() in self.snake.get_segments():
-                self.food.relocate()
-            self.snake.grow()
-            self.score += 1
-        else:
-            self.snake.pop_tail()
-
-        if self.WallHit() or self.SnakeHit():
-            self.snake = None
-
-    def WallHit(self):
-        head = self.snake.get_segments()[0]
-        return head['x'] < 0 or head['x'] >= self.map_size or head['y'] < 0 or head['y'] >= self.map_size
-
-    def SnakeHit(self):
-        head = self.snake.get_segments()[0]
-        return head in self.snake.get_segments()[1:]
-
-    def TheEnd(self):
-        return self.snake is None
-
-    def ChangeDir(self, direction):
-        self.snake.change_direction(direction)
-
-    def CheckTheState(self):
-        return {
-            'snake': self.snake.get_segments(),
-            'food': self.food.get_position(),
-            'score': self.score,
-            'direction': self.snake.direction
-        }
 
 @app.route('/')
-def index():
+def home():
     return render_template('index.html')
 
-@app.route('/game_state', methods=['POST'])
-def GetState():
-    data = request.get_json()
-    action = data.get('action')
-    if action == 'start':
-        map_size = data.get('map_size')
-        game = SnakeGame(map_size)
-        return jsonify(game.CheckTheState()), 200
-    elif action == 'move':
-        game_state = data.get('game_state')
-        direction = data.get('direction')
-        game = SnakeGame(game_state['map_size'], state=game_state)
-        game.ChangeDir(direction)
-        game.update()
-        if game.TheEnd():
-            return jsonify({'game_over': True, 'score': game.score}), 200
-        else:
-            return jsonify(game.CheckTheState()), 200
 
-@app.route('/SaveScore', methods=['POST'])
-def Saves():
-    data = request.get_json()
-    name = data.get('name')
-    MapSize = data.get('MapSize')
-    score = data.get('score')
-    if name and score is not None:
-        scoreCollection.insert_one({'name': name, 'mapSize': MapSize, 'score': score})
-        return jsonify({'status': 'success'}), 200
-    else:
-        return jsonify({'status': 'error'}), 400
+@app.route('/start_game', methods=['POST'])
+def Start():
+    global State
+    State = {
+        "player_pos": GRID_SIZE // 2,
+        "aliens": [CreateMob() for _ in range(5)],
+        "bullets": [],
+        "total_destroyed": State["total_destroyed"],
+        "game_over": False
+    }
+    return jsonify(State)
 
-@app.route('/TopScores', methods=['GET'])
-def top_scores():
-    top_scores = scoreCollection.find().sort('score', -1).limit(10)
-    return jsonify([{'name': score['name'], 'score': score['score']} for score in top_scores])
+
+@app.route('/move_player', methods=['POST'])
+def MoveLeftRight():
+    global State
+    direction = request.json.get('direction')
+    if direction == 'left' and State["player_pos"] > 0:
+        State["player_pos"] -= 1
+    elif direction == 'right' and State["player_pos"] < GRID_SIZE - 1:
+        State["player_pos"] += 1
+
+    State["bullets"].append({"x": State["player_pos"], "y": 0})
+
+    return jsonify(State)
+
+
+@app.route('/update_game', methods=['POST'])
+def UpdateGame():
+    global State
+    if not State["game_over"]:
+        new_aliens = []
+        for alien in State["aliens"]:
+            alien_hit = False
+            for bullet in State["bullets"]:
+                if bullet["x"] == alien["x"] and bullet["y"] == alien["y"]:
+                    collection.insert_one({'count': 1})
+                    State["total_destroyed"] += 1
+                    alien_hit = True
+                    break
+
+            if not alien_hit:
+                if alien["y"] > 0:
+                    alien["y"] -= 1
+                    new_aliens.append(alien)
+                else:
+                    collection.insert_one({'count': 1})
+                    State["total_destroyed"] += 1
+                    State["game_over"] = True
+
+        while len(new_aliens) < len(State["aliens"]):
+            new_aliens.append(CreateMob())
+
+        State["aliens"] = new_aliens
+
+        State["bullets"] = [{"x": bullet["x"], "y": bullet["y"] + 1} for bullet in State["bullets"]]
+        State["bullets"] = [bullet for bullet in State["bullets"] if bullet["y"] < GRID_SIZE]
+
+        if State["game_over"]:
+            SaveScore(State["total_destroyed"])
+
+    return jsonify(State)
+
+
+@app.route('/get_total_destroyed', methods=['GET'])
+def SendTotal():
+    total_destroyed = sum([doc['count'] for doc in collection.find()])
+    return jsonify({'total_destroyed': total_destroyed})
+
+
+def SaveScore(score):
+    collection.insert_one({'total_destroyed': score})
+
 
 if __name__ == '__main__':
     app.run(debug=True)
